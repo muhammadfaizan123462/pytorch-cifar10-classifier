@@ -1,54 +1,50 @@
-# Unsupervised Anomaly Detection with Autoencoders
+# CIFAR-10 Image Classification with PyTorch
 
-Detect anomalies in multivariate sensor-style data with a deep autoencoder:
-train **only on normal data**, then flag samples with high reconstruction
-error. Includes threshold calibration, a full precision/recall evaluation
-and latent-space visualisation.
+A from-scratch convolutional neural network (VGG-style) trained on CIFAR-10,
+with modern training practices: augmentation, AdamW, cosine LR schedule,
+label smoothing, gradient clipping, checkpointing and early stopping.
 
-## How it works
+## Model
 
-1. **Data** (`src/data.py`) — synthetic 12-sensor dataset: normal points from
-   a Gaussian mixture, anomalies injected as shifted/scaled outliers.
-   The training split contains *only* normal data (true unsupervised setup).
-2. **Model** (`src/model.py`) — symmetric MLP autoencoder
-   (12 → 64 → 32 → 3 → 32 → 64 → 12) with dropout; the tight 3-D bottleneck
-   forces the network to learn the normal manifold.
-3. **Training** (`src/train.py`) — MSE reconstruction loss, AdamW,
-   ReduceLROnPlateau scheduling, early stopping, and threshold calibration
-   at the 95th percentile of training reconstruction errors.
-4. **Evaluation** (`src/detect.py`) — precision/recall/F1, ROC AUC,
-   average precision, plus a threshold sweep.
-5. **Visualisation** (`src/visualize.py`) — error distributions and a
-   2-D latent-space scatter plot.
+`TinyVGG` — three conv blocks (64→128→256 channels, BatchNorm + ReLU),
+global average pooling and a linear classifier (~1.2M parameters).
+Small enough to train on CPU, strong enough to learn real features.
+
+## Project structure
+
+```
+pytorch-cifar10-classifier/
+├── src/
+│   ├── data.py      # CIFAR-10 loaders + train-time augmentation
+│   ├── model.py     # TinyVGG architecture
+│   ├── train.py     # training loop, scheduling, checkpointing
+│   ├── evaluate.py  # accuracy, per-class report, confusion matrix
+│   └── predict.py   # single-image inference CLI
+└── configs/
+    └── default.yaml # hyperparameters
+```
 
 ## Quickstart
 
 ```bash
 pip install -r requirements.txt
 
-python src/data.py        # generate data
-python src/train.py       # train + calibrate threshold
-python src/detect.py      # evaluate on labelled test set
-python src/visualize.py   # save plots to checkpoints/
+# Train (30 epochs, ~1-2h on CPU, minutes on GPU)
+python src/train.py
+
+# Quick correctness check (1 epoch, 512 samples)
+python src/train.py --smoke
+
+# Evaluate the best checkpoint
+python src/evaluate.py
+
+# Classify your own image
+python src/predict.py --image my_photo.png --topk 3
 ```
 
-## Results (measured on the synthetic test set)
+## Training details
 
-| Metric | Value |
-|---|---|
-| ROC AUC | 1.000 |
-| Average precision | 1.000 |
-| Accuracy | 0.962 |
-| Anomaly precision / recall / F1 | 0.846 / 1.000 / 0.916 |
-
-The calibrated 95th-percentile threshold catches every injected anomaly
-with only a small false-positive rate on normal data.
-
-## Key ideas demonstrated
-
-- **Unsupervised learning**: no anomaly labels are used during training —
-  the model learns "normal" and anything else stands out.
-- **Threshold calibration** from the training error distribution instead
-  of a magic number.
-- **Honest evaluation**: ROC AUC / average precision on a held-out
-  labelled test set, with a precision–recall trade-off sweep.
+- **Augmentation**: random crop, horizontal flip, rotation
+- **Optimiser**: AdamW (weight decay 5e-4) + cosine annealing schedule
+- **Regularisation**: label smoothing (0.05), dropout, gradient clipping
+- **Selection**: best checkpoint by validation accuracy, early stopping
