@@ -1,0 +1,6 @@
+# Default training hyperparameters for TinyVGG on CIFAR-10.
+epochs: 30
+lr: 0.003
+batch_size: 128
+dropout: 0.25
+early_stopping_patience: 8
